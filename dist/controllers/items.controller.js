@@ -9,6 +9,7 @@ export async function getAllItems(req, res) {
         const maxPrice = parseFloat(req.query.maxPrice);
         const fuelType = req.query.fuelType;
         const condition = req.query.condition;
+        const bodyType = req.query.bodyType;
         const sortBy = req.query.sortBy || "createdAt";
         const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
         const filter = {};
@@ -25,6 +26,8 @@ export async function getAllItems(req, res) {
             filter.fuelType = fuelType;
         if (condition)
             filter.condition = condition;
+        if (bodyType)
+            filter.bodyType = bodyType;
         if (!isNaN(minPrice) || !isNaN(maxPrice)) {
             filter.price = {};
             if (!isNaN(minPrice))

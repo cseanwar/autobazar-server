@@ -14,6 +14,7 @@ export interface CarItem {
   condition: "new" | "used";
   color: string;
   location: string;
+  bodyType?: "sedan" | "suv" | "sports" | "luxury" | "off-road" | "truck";
   sellerId: string;
   status: "available" | "sold" | "pending";
   createdAt: Date;

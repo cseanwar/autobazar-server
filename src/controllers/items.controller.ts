@@ -13,6 +13,7 @@ export async function getAllItems(req: Request, res: Response) {
     const maxPrice = parseFloat(req.query.maxPrice as string);
     const fuelType = req.query.fuelType as string | undefined;
     const condition = req.query.condition as string | undefined;
+    const bodyType = req.query.bodyType as string | undefined;
     const sortBy = (req.query.sortBy as string) || "createdAt";
     const sortOrder = (req.query.sortOrder as string) === "asc" ? 1 : -1;
 
@@ -27,6 +28,7 @@ export async function getAllItems(req: Request, res: Response) {
     if (make) filter.make = { $regex: make, $options: "i" } as any;
     if (fuelType) filter.fuelType = fuelType as CarItem["fuelType"];
     if (condition) filter.condition = condition as CarItem["condition"];
+    if (bodyType) filter.bodyType = bodyType as CarItem["bodyType"];
     if (!isNaN(minPrice) || !isNaN(maxPrice)) {
       filter.price = {} as any;
       if (!isNaN(minPrice)) (filter.price as any).$gte = minPrice;
