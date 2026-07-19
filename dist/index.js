@@ -31,10 +31,12 @@ export async function init() {
     initialized = true;
 }
 export default app;
+const PORT = parseInt(process.env.PORT || "5000");
 if (process.env.NODE_ENV !== "production") {
-    const PORT = parseInt(process.env.PORT || "5000");
-    app.listen(PORT, () => {
-        console.log(`Server running on http://localhost:${PORT}`);
+    init().then(() => {
+        app.listen(PORT, () => {
+            console.log(`Server running on http://localhost:${PORT}`);
+        });
     });
 }
 //# sourceMappingURL=index.js.map
