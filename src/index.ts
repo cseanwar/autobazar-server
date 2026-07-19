@@ -10,7 +10,6 @@ import aiRouter from "./routes/ai.js";
 import contactRouter from "./routes/contact.js";
 
 const app = express();
-const PORT = parseInt(process.env.PORT || "5000");
 
 app.use(cors({
   origin: process.env.CLIENT_URL || "http://localhost:3000",
@@ -18,29 +17,28 @@ app.use(cors({
 }));
 app.use(cookieParser());
 
-async function start() {
-  try {
-    await connectDB();
+let initialized = false;
 
-    const auth = createAuth();
-    app.all(/^\/api\/auth(?:\/.*)?$/, toNodeHandler(auth));
-
-    app.use(express.json());
-    app.use("/api/items", itemsRouter);
-    app.use("/api/ai", aiRouter);
-    app.use("/api/contact", contactRouter);
-
-    app.get("/api/health", (_req, res) => {
-      res.json({ status: "ok", timestamp: new Date().toISOString() });
-    });
-
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  } catch (error) {
-    console.error("Failed to start server:", error);
-    process.exit(1);
-  }
+export async function init() {
+  if (initialized) return;
+  await connectDB();
+  const auth = createAuth();
+  app.all(/^\/api\/auth(?:\/.*)?$/, toNodeHandler(auth));
+  app.use(express.json());
+  app.use("/api/items", itemsRouter);
+  app.use("/api/ai", aiRouter);
+  app.use("/api/contact", contactRouter);
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+  initialized = true;
 }
 
-start();
+export default app;
+
+if (process.env.NODE_ENV !== "production") {
+  const PORT = parseInt(process.env.PORT || "5000");
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
