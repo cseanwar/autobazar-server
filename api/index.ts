@@ -7,5 +7,14 @@ export default async function handler(req: any, res: any) {
     await init();
     initialized = true;
   }
-  return app(req, res);
+
+  app(req, res);
+
+  if (res.writableFinished || res.finished) return;
+
+  await new Promise<void>((resolve, reject) => {
+    res.on("finish", resolve);
+    res.on("close", resolve);
+    res.on("error", reject);
+  });
 }
