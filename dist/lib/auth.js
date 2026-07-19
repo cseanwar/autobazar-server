@@ -23,7 +23,7 @@ export function createAuth() {
             defaultCookieAttributes: {
                 secure: process.env.NODE_ENV === "production",
                 httpOnly: true,
-                sameSite: "lax",
+                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
             },
         },
     });

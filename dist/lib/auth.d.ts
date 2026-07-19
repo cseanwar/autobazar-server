@@ -16,7 +16,7 @@ export declare function createAuth(): import("better-auth").Auth<{
         defaultCookieAttributes: {
             secure: boolean;
             httpOnly: true;
-            sameSite: "lax";
+            sameSite: "none" | "lax";
         };
     };
 }>;
