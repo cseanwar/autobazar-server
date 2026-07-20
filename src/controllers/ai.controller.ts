@@ -1,9 +1,26 @@
 import { Request, Response } from "express";
 import { Groq } from "groq-sdk";
 
+const hasGroqKey = Boolean(process.env.GROQ_API_KEY);
+
 const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY || "",
+  apiKey: process.env.GROQ_API_KEY || "no-key",
 });
+
+/** Sends an SSE error event and closes the response. */
+function sseError(res: Response, message: string) {
+  res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+  res.write(`data: [DONE]\n\n`);
+  res.end();
+}
+
+/** Sets standard SSE headers. Must be called before any res.write(). */
+function startSSE(res: Response) {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+}
 
 const DESCRIPTION_TEMPLATES: Record<string, string> = {
   professional:
@@ -26,6 +43,11 @@ export async function generateDescription(req: Request, res: Response) {
 
     if (!make || !model || !year) {
       res.status(400).json({ success: false, error: "Make, model, and year are required" });
+      return;
+    }
+
+    if (!hasGroqKey) {
+      res.status(503).json({ success: false, error: "AI description generation is not configured. Please add a GROQ_API_KEY to the server." });
       return;
     }
 
@@ -66,35 +88,48 @@ Generate only the description text, no additional commentary.`;
 
     res.json({ success: true, data: { description } });
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    const err = error as Error & { status?: number };
+    const isNetworkBlock = err.status === 403 || err.message?.includes("Access denied") || err.message?.includes("network");
+    const userMessage = isNetworkBlock
+      ? "The AI service is unavailable in your region. Please try using a VPN."
+      : err.message ?? "Failed to generate description";
+    res.status(500).json({ success: false, error: userMessage });
   }
 }
 
 export async function chat(req: Request, res: Response) {
+  const { message, history } = req.body;
+
+  if (!message) {
+    res.status(400).json({ success: false, error: "Message is required" });
+    return;
+  }
+
+  // Set SSE headers FIRST so we can always stream an error back
+  startSSE(res);
+
+  if (!hasGroqKey) {
+    sseError(res, "AI assistant is not configured. Please add a GROQ_API_KEY to the server environment.");
+    return;
+  }
+
+  const messages = [
+    {
+      role: "system" as const,
+      content:
+        "You are AutoBazaar Assistant, a helpful AI assistant for an automotive marketplace. You help users with:\n" +
+        "- Answering questions about cars, specifications, and the marketplace\n" +
+        "- Providing car buying/selling advice\n" +
+        "- Suggesting what to look for when inspecting vehicles\n" +
+        "- Explaining automotive terms and concepts\n\n" +
+        "Keep responses concise, informative, and friendly. If asked about specific listings, guide users to use the search feature.\n" +
+        "You do NOT have real-time access to the marketplace database, so you cannot check specific listings or user data.",
+    },
+    ...(history || []).slice(-10),
+    { role: "user" as const, content: message },
+  ];
+
   try {
-    const { message, history } = req.body;
-
-    if (!message) {
-      res.status(400).json({ success: false, error: "Message is required" });
-      return;
-    }
-
-    const messages = [
-      {
-        role: "system" as const,
-        content:
-          "You are AutoBazaar Assistant, a helpful AI assistant for an automotive marketplace. You help users with:\n" +
-          "- Answering questions about cars, specifications, and the marketplace\n" +
-          "- Providing car buying/selling advice\n" +
-          "- Suggesting what to look for when inspecting vehicles\n" +
-          "- Explaining automotive terms and concepts\n\n" +
-          "Keep responses concise, informative, and friendly. If asked about specific listings, guide users to use the search feature.\n" +
-          "You do NOT have real-time access to the marketplace database, so you cannot check specific listings or user data.",
-      },
-      ...(history || []).slice(-10),
-      { role: "user" as const, content: message },
-    ];
-
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages,
@@ -102,10 +137,6 @@ export async function chat(req: Request, res: Response) {
       max_tokens: 1024,
       stream: true,
     });
-
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
 
     for await (const chunk of completion) {
       const content = chunk.choices[0]?.delta?.content || "";
@@ -117,7 +148,14 @@ export async function chat(req: Request, res: Response) {
     res.write(`data: [DONE]\n\n`);
     res.end();
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    const err = error as Error & { status?: number };
+    const isNetworkBlock = err.status === 403 || err.message?.includes("Access denied") || err.message?.includes("network");
+
+    const userMessage = isNetworkBlock
+      ? "The AI service is currently unavailable in your region. Please try using a VPN, or contact support."
+      : `AI error: ${err.message ?? "Unknown error"}`;
+
+    sseError(res, userMessage);
   }
 }
 
