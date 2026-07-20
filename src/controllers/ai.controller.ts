@@ -8,7 +8,7 @@ const groq = new Groq({
   apiKey: GROQ_API_KEY,
 });
 
-const GROQ_MODEL = "openai/gpt-oss-120b";
+const GROQ_MODEL = "llama-3.1-8b-instant";
 
 /** Sends an SSE error event and closes the response. */
 function sseError(res: Response, message: string) {
