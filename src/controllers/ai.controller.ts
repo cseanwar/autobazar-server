@@ -105,11 +105,8 @@ export async function chat(req: Request, res: Response) {
     return;
   }
 
-  // Set SSE headers FIRST so we can always stream an error back
-  startSSE(res);
-
   if (!hasGroqKey) {
-    sseError(res, "AI assistant is not configured. Please add a GROQ_API_KEY to the server environment.");
+    res.status(503).json({ success: false, error: "AI assistant is not configured. Please add a GROQ_API_KEY to the server environment." });
     return;
   }
 
@@ -129,6 +126,9 @@ export async function chat(req: Request, res: Response) {
     { role: "user" as const, content: message },
   ];
 
+  // Vercel serverless doesn't support SSE streaming — collect into buffer and send once
+  const isVercel = Boolean(process.env.VERCEL);
+
   try {
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
@@ -138,15 +138,25 @@ export async function chat(req: Request, res: Response) {
       stream: true,
     });
 
-    for await (const chunk of completion) {
-      const content = chunk.choices[0]?.delta?.content || "";
-      if (content) {
-        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+    if (isVercel) {
+      // Buffered mode: collect all chunks, then send as one JSON response
+      let fullContent = "";
+      for await (const chunk of completion) {
+        fullContent += chunk.choices[0]?.delta?.content || "";
       }
+      res.json({ success: true, content: fullContent });
+    } else {
+      // Streaming SSE mode for local dev
+      startSSE(res);
+      for await (const chunk of completion) {
+        const content = chunk.choices[0]?.delta?.content || "";
+        if (content) {
+          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+        }
+      }
+      res.write(`data: [DONE]\n\n`);
+      res.end();
     }
-
-    res.write(`data: [DONE]\n\n`);
-    res.end();
   } catch (error) {
     const err = error as Error & { status?: number };
     const isNetworkBlock = err.status === 403 || err.message?.includes("Access denied") || err.message?.includes("network");
@@ -155,7 +165,12 @@ export async function chat(req: Request, res: Response) {
       ? "The AI service is currently unavailable in your region. Please try using a VPN, or contact support."
       : `AI error: ${err.message ?? "Unknown error"}`;
 
-    sseError(res, userMessage);
+    if (res.headersSent) {
+      // SSE already started — send error via stream
+      sseError(res, userMessage);
+    } else {
+      res.status(503).json({ success: false, error: userMessage });
+    }
   }
 }
 
