@@ -1,11 +1,14 @@
 import { Request, Response } from "express";
 import { Groq } from "groq-sdk";
 
-const hasGroqKey = Boolean(process.env.GROQ_API_KEY);
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+const hasGroqKey = Boolean(GROQ_API_KEY);
 
 const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY || "no-key",
+  apiKey: GROQ_API_KEY,
 });
+
+const GROQ_MODEL = "llama3-8b-8192";
 
 /** Sends an SSE error event and closes the response. */
 function sseError(res: Response, message: string) {
@@ -72,7 +75,7 @@ ${lengthGuide}
 Generate only the description text, no additional commentary.`;
 
     const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: GROQ_MODEL,
       messages: [
         {
           role: "system",
@@ -92,7 +95,7 @@ Generate only the description text, no additional commentary.`;
     const isNetworkBlock = err.status === 403 || err.message?.includes("Access denied") || err.message?.includes("network");
     const userMessage = isNetworkBlock
       ? "The AI service is unavailable in your region. Please try using a VPN."
-      : err.message ?? "Failed to generate description";
+      : `AI error (model: ${GROQ_MODEL}): ${err.message ?? "Failed to generate description"}`;
     res.status(500).json({ success: false, error: userMessage });
   }
 }
@@ -131,7 +134,7 @@ export async function chat(req: Request, res: Response) {
 
   try {
     const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: GROQ_MODEL,
       messages,
       temperature: 0.7,
       max_tokens: 1024,
@@ -163,7 +166,7 @@ export async function chat(req: Request, res: Response) {
 
     const userMessage = isNetworkBlock
       ? "The AI service is currently unavailable in your region. Please try using a VPN, or contact support."
-      : `AI error: ${err.message ?? "Unknown error"}`;
+      : `AI error (model: ${GROQ_MODEL}): ${err.message ?? "Unknown error"}`;
 
     if (res.headersSent) {
       // SSE already started — send error via stream
@@ -193,7 +196,7 @@ export async function analyzeData(req: Request, res: Response) {
     };
 
     const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: GROQ_MODEL,
       messages: [
         {
           role: "system",
